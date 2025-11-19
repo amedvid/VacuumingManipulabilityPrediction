@@ -1,0 +1,65 @@
+# ---------------------------------------
+# Python cache / build / temp files
+# ---------------------------------------
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.pdb
+*.pkl
+*.h5
+*.npy
+*.npz
+
+# Byte-compiled / optimized / DLL files
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+parts/
+sdist/
+var/
+*.egg-info/
+*.egg
+
+# ---------------------------------------
+# Virtual environments
+# ---------------------------------------
+venv/
+env/
+ENV/
+.venv/
+.Python
+pip-wheel-metadata/
+
+# ---------------------------------------
+# PyCharm / IntelliJ
+# ---------------------------------------
+.idea/
+*.iml
+
+out/
+
+**/tb/
+tensorboard/
+*.tfevents.*
+
+experiments/
+data/
+
+*.pt
+*.pth
+*.onnx
+*.joblib
+
+.DS_Store
+Thumbs.db
+
+logs/
+*.log
+
+*.bak
+*.tmp
+*~
