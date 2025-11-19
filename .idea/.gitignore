@@ -54,7 +54,7 @@ tensorboard/
 # ---------------------------------------
 # Experiment outputs (your training runs)
 # ---------------------------------------
-experiments/
+*experiments/*
 
 # ---------------------------------------
 # Models
