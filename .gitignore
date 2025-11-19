@@ -1,0 +1,19 @@
+# Ignore PyCharm
+.idea/
+
+# Ignore experiments
+experiments/
+
+# Ignore TensorBoard logs
+tb/
+*.tfevents.*
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Virtual env
+env/
+venv/
+.venv/
+Parser/
