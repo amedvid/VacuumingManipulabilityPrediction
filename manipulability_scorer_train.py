@@ -15,7 +15,7 @@ from manipulability_model import ManipulabilityMLP
 # -------------------------------
 # Global config parameters
 # -------------------------------
-EPOCHS = 50
+EPOCHS = 1500
 BATCH_SIZE = 128
 LEARNING_RATE = 1e-3
 DEVICE = "cuda"   # "cpu" if no GPU
@@ -62,7 +62,8 @@ def evaluate(model, loader, device, target_mean, target_std):
     """
     Compute:
       - normalized MSE/MAE (in normalized space)
-      - denormalized MSE/MAE (real values).
+      - denormalized MSE/MAE (real values)
+      - per-dim MAE (denorm, 6 values).
     """
     model.eval()
     mse_loss_norm = nn.MSELoss(reduction="sum")
@@ -72,6 +73,7 @@ def evaluate(model, loader, device, target_mean, target_std):
     total_mae_norm = 0.0
     total_mse_denorm = 0.0
     total_mae_denorm = 0.0
+    total_mae_denorm_dim = torch.zeros(6, dtype=torch.float64, device=device)
     total_n = 0
 
     tm = target_mean.to(device)
@@ -94,6 +96,7 @@ def evaluate(model, loader, device, target_mean, target_std):
             diff = y_pred - y
             total_mse_denorm += (diff * diff).sum().item()
             total_mae_denorm += diff.abs().sum().item()
+            total_mae_denorm_dim += diff.abs().sum(dim=0)
 
             total_n += y.shape[0]
 
@@ -101,8 +104,9 @@ def evaluate(model, loader, device, target_mean, target_std):
     mae_norm = total_mae_norm / total_n
     mse_denorm = total_mse_denorm / total_n
     mae_denorm = total_mae_denorm / total_n
+    mae_dim = (total_mae_denorm_dim / total_n).to("cpu")
 
-    return mse_norm, mae_norm, mse_denorm, mae_denorm
+    return mse_norm, mae_norm, mse_denorm, mae_denorm, mae_dim
 
 
 def train(data_path: str):
@@ -137,7 +141,7 @@ def train(data_path: str):
         hidden_dims=HIDDEN_DIMS
     ).to(device)
 
-    criterion_norm = nn.MSELoss(reduction="sum")  # we will divide by N manually
+    criterion_norm = nn.MSELoss(reduction="sum")  # summed over batch
     optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)
 
     history = {
@@ -147,6 +151,8 @@ def train(data_path: str):
         "val_mse_norm": [],
         "val_mse": [],
         "val_mae": [],
+        "train_mae_dim": [],  # list of 6-d lists
+        "val_mae_dim": [],    # list of 6-d lists
     }
 
     # TensorBoard writer
@@ -160,6 +166,7 @@ def train(data_path: str):
         total_mse_norm = 0.0
         total_mse_denorm = 0.0
         total_mae_denorm = 0.0
+        total_mae_denorm_dim = torch.zeros(6, dtype=torch.float64, device=device)
         total_n = 0
 
         for x, y in train_loader:
@@ -184,18 +191,22 @@ def train(data_path: str):
             diff = y_pred - y
             total_mse_denorm += (diff * diff).sum().item()
             total_mae_denorm += diff.abs().sum().item()
+            total_mae_denorm_dim += diff.abs().sum(dim=0)
             total_n += bs
 
         train_mse_norm = total_mse_norm / total_n
         train_mse = total_mse_denorm / total_n
         train_mae = total_mae_denorm / total_n
+        train_mae_dim = (total_mae_denorm_dim / total_n).to("cpu").tolist()
 
         (
             val_mse_norm,
             val_mae_norm,
             val_mse,
             val_mae,
+            val_mae_dim_tensor,
         ) = evaluate(model, val_loader, device, target_mean, target_std)
+        val_mae_dim = val_mae_dim_tensor.tolist()
 
         history["train_mse_norm"].append(train_mse_norm)
         history["train_mse"].append(train_mse)
@@ -203,6 +214,8 @@ def train(data_path: str):
         history["val_mse_norm"].append(val_mse_norm)
         history["val_mse"].append(val_mse)
         history["val_mae"].append(val_mae)
+        history["train_mae_dim"].append(train_mae_dim)
+        history["val_mae_dim"].append(val_mae_dim)
 
         # TensorBoard logging: normalized and denormalized
         writer.add_scalar("Loss/train_mse_norm", train_mse_norm, epoch)
@@ -238,21 +251,62 @@ def train(data_path: str):
     torch.save(ckpt, MODEL_OUT)
     print(f"Model saved to {MODEL_OUT}")
 
-    # Plot curve (denormalized MSE/MAE – більш інтерпретовано)
-    out_png = BASE_DIR / "loss_curves.png"
     epochs_range = range(1, EPOCHS + 1)
 
+    # 1. Train vs Val MSE (denorm)
     plt.figure(figsize=(14, 6))
-    plt.plot(epochs_range, history["train_mse"], label="Train MSE (denorm)")
-    plt.plot(epochs_range, history["val_mse"], label="Val MSE (denorm)")
-    plt.plot(epochs_range, history["val_mae"], label="Val MAE (denorm)")
+    plt.plot(epochs_range, history["train_mse"], label="Train MSE")
+    plt.plot(epochs_range, history["val_mse"], label="Val MSE")
     plt.xlabel("Epoch")
-    plt.ylabel("Loss (original units)")
+    plt.ylabel("MSE (denorm)")
     plt.legend()
     plt.grid(True)
     plt.tight_layout()
-    plt.savefig(out_png, dpi=200)
-    print(f"Training curve saved to {out_png}")
+    plt.savefig(BASE_DIR / "plot_mse.png", dpi=200)
+    print(f"MSE curve saved to {BASE_DIR / 'plot_mse.png'}")
+
+    # 2. Train vs Val MAE (denorm)
+    plt.figure(figsize=(14, 6))
+    plt.plot(epochs_range, history["train_mae"], label="Train MAE")
+    plt.plot(epochs_range, history["val_mae"], label="Val MAE")
+    plt.xlabel("Epoch")
+    plt.ylabel("MAE (denorm)")
+    plt.legend()
+    plt.grid(True)
+    plt.tight_layout()
+    plt.savefig(BASE_DIR / "plot_mae.png", dpi=200)
+    print(f"MAE curve saved to {BASE_DIR / 'plot_mae.png'}")
+
+    def plot_dim_pair(dim1, dim2, label1, label2, filename):
+        train = history["train_mae_dim"]
+        val = history["val_mae_dim"]
+
+        train_d1 = [x[dim1] for x in train]
+        train_d2 = [x[dim2] for x in train]
+        val_d1 = [x[dim1] for x in val]
+        val_d2 = [x[dim2] for x in val]
+
+        plt.figure(figsize=(14, 6))
+        plt.plot(epochs_range, train_d1, label=f"Train {label1}")
+        plt.plot(epochs_range, train_d2, label=f"Train {label2}")
+        plt.plot(epochs_range, val_d1, label=f"Val {label1}")
+        plt.plot(epochs_range, val_d2, label=f"Val {label2}")
+        plt.xlabel("Epoch")
+        plt.ylabel("MAE (denorm)")
+        plt.legend()
+        plt.grid(True)
+        plt.tight_layout()
+        plt.savefig(BASE_DIR / filename, dpi=200)
+        print(f"Per-dim MAE curve saved to {BASE_DIR / filename}")
+
+    # 3. MAE for X positive (0) and X negative (1)
+    plot_dim_pair(0, 1, "X+", "X-", "plot_mae_x.png")
+
+    # 4. MAE for Y positive (2) and Y negative (3)
+    plot_dim_pair(2, 3, "Y+", "Y-", "plot_mae_y.png")
+
+    # 5. MAE for Yaw positive (4) and Yaw negative (5)
+    plot_dim_pair(4, 5, "Yaw+", "Yaw-", "plot_mae_yaw.png")
 
     end_time = time.perf_counter()
     elapsed_sec = end_time - start_time
