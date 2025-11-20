@@ -144,6 +144,13 @@ def train(data_path: str):
     criterion_norm = nn.MSELoss(reduction="sum")  # summed over batch
     optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)
 
+    # Cosine annealing LR scheduler
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+        optimizer,
+        T_max=EPOCHS,
+        eta_min=1e-6,
+    )
+
     history = {
         "train_mse_norm": [],
         "train_mse": [],
@@ -226,8 +233,13 @@ def train(data_path: str):
         writer.add_scalar("Loss/val_mse", val_mse, epoch)
         writer.add_scalar("Loss/val_mae", val_mae, epoch)
 
+        # Log current learning rate
+        current_lr = optimizer.param_groups[0]["lr"]
+        writer.add_scalar("LR", current_lr, epoch)
+
         print(
             f"Epoch {epoch:04d}: "
+            f"LR={current_lr:.6e}  "
             f"train_mse_norm={train_mse_norm:.6f}  "
             f"train_mse={train_mse:.6f}  "
             f"train_mae={train_mae:.6f}  "
@@ -235,6 +247,9 @@ def train(data_path: str):
             f"val_mse={val_mse:.6f}  "
             f"val_mae={val_mae:.6f}"
         )
+
+        # Update LR
+        scheduler.step()
 
     writer.close()
 
