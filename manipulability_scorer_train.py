@@ -15,12 +15,12 @@ from manipulability_model import ManipulabilityMLP
 # -------------------------------
 # Global config parameters
 # -------------------------------
-EPOCHS = 50
-BATCH_SIZE = 256
+EPOCHS = 2000
+BATCH_SIZE = 64
 LEARNING_RATE = 1e-3
 DEVICE = "cuda"   # "cpu" if no GPU
 VAL_RATIO = 0.2
-HIDDEN_DIMS = (128, 128, 64)
+HIDDEN_DIMS = (128, 256, 128, 64)
 # -------------------------------
 
 # Build run name with architecture + hyperparams + timestamp
@@ -146,7 +146,7 @@ def train(data_path: str):
     out_png = BASE_DIR / "loss_curves.png"
     epochs = range(1, EPOCHS + 1)
 
-    plt.figure()
+    plt.figure(figsize=(14, 6))
     plt.plot(epochs, history["train_loss"], label="Train MSE loss")
     plt.plot(epochs, history["val_mse"], label="Val MSE")
     plt.plot(epochs, history["val_mae"], label="Val MAE")
@@ -155,7 +155,7 @@ def train(data_path: str):
     plt.legend()
     plt.grid(True)
     plt.tight_layout()
-    plt.savefig(out_png)
+    plt.savefig(out_png, dpi=200)
     print(f"Training curve saved to {out_png}")
 
     end_time = time.perf_counter()
